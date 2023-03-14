@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phasor_nets"
+version = "0.1.0"
+authors = [
+    {name = "Wilkie Olin-Ammentorp"}
+]
+readme = "README.md"
