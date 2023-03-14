@@ -13,8 +13,8 @@ from jax.lax import complex
 import jax.numpy as jnp
 import haiku as hk
 from einops import rearrange
-from utils import *
-from spiking import *
+from phasor_jax.utils import *
+from phasor_jax.spiking import *
 
 
 #   _____      _           _ _   _                
