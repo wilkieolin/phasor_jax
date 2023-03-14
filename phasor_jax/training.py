@@ -8,14 +8,13 @@ Argonne National Laboratory
 import haiku as hk
 import jax
 import jax.numpy as jnp
-
 import optax
 import tensorflow_datasets as tfds
 
-from modules import *
-from utils import *
 from tqdm import tqdm
 from functools import reduce
+from phasor_jax.modules import *
+from phasor_jax.utils import *
 
 #
 # Data functions
