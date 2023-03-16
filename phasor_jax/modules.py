@@ -350,21 +350,23 @@ class ProjectAll(hk.Module):
         
         return x
 
-def conv_1d(dimension, init_scale=1.0):
+def conv_1d(dimension, init_scale=1.0, **kwargs):
     """
     Convenience wrapper around PhasorDense call
     """
     return PhasorDense(dimension, 
-                     w_init=hk.initializers.VarianceScaling(init_scale))
+                     w_init=hk.initializers.VarianceScaling(init_scale),
+                     **kwargs)
 
-def conv_1d_mh(dimension, n_heads, init_scale=1.0):
+def conv_1d_mh(dimension, n_heads, init_scale=1.0, **kwargs):
     """
     Convenience wrapper around PhasorMultiDense call
     """
  
     return PhasorMultiDense(dimension, 
                      n_heads = n_heads,
-                     w_init=hk.initializers.VarianceScaling(init_scale))
+                     w_init=hk.initializers.VarianceScaling(init_scale),
+                     **kwargs)
 
 def layer_norm(x, name=None):
     """
