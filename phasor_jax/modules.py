@@ -94,16 +94,16 @@ class GraphEncoder(hk.Module):
         for i in range(n_batch):
             #load the active bonds (edges)
             #undirected graph so only use upper triangle of symmetric adj. matrix
-            active_edges = tf.experimental.numpy.triu(x['pair_mask'][i,...])
-            active_edges = tf.where(active_edges)
-            edges = tf.gather_nd(x['pairs'][i], active_edges)
+            active_edges = np.triu(x['pair_mask'][i,...])
+            active_edges = np.where(active_edges)
+            edges = np.take(x['pairs'][i], active_edges)
             
             #find the atoms for each bond
             sources = active_edges[:,0]
-            source_atoms = tf.gather(x['atoms'][i], sources, axis=0)
+            source_atoms = np.take_along_axis(x['atoms'][i], sources, axis=0)
             
             destinations = active_edges[:,1]
-            dest_atoms = tf.gather(x['atoms'][i], destinations, axis=0)
+            dest_atoms = np.take_along_axis(x['atoms'][i], destinations, axis=0)
             
             #convert to device array
             source_atoms = jnp.array(source_atoms)
