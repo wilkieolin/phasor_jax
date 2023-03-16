@@ -64,6 +64,15 @@ def accuracy(net, key, params, images, labels, **kwargs):
     yhat = jnp.argmax(yhat, axis=1)
     return yhat == labels
 
+def accuracy_quadrature(net, key, params, images, labels, **kwargs):
+    """
+    Compute classification accuracy with a model designed to produce out-of-phase
+    outputs for the predicted class instead of pure similarity values.
+    """
+
+    yhat = net.apply(params, key, images, **kwargs)
+    yhat = jnp.argmin(jnp.abs(yhat - 0.5), axis=1)
+    return yhat == labels
 
 def update_params(model: hk.Transformed, 
                 key,

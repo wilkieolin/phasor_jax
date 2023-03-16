@@ -247,7 +247,7 @@ def quadrature_loss(phases: jnp.ndarray, labels: jnp.ndarray, num_classes: int):
     Return how dissimilar the output is to a vector of zeros except the correct class
     which is at an angle of pi / 2.
     """
-    targets = jax.nn.one_hot(labels, num_classes)
+    targets = 0.5 * jax.nn.one_hot(labels, num_classes)
     sim = similarity(phases, targets)
     return 1.0 - sim
 

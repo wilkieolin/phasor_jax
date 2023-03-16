@@ -153,9 +153,8 @@ class PhasorDense(hk.Module):
         super().__init__(name=name)
         self.output_size = output_size
         self.w_init = w_init
-        self.mask_angle = mask_angle
         
-    def __call__(self, x, spiking: bool = False, **kwargs):
+    def __call__(self, x, spiking: bool = False, mask_angle: float = -1.0, **kwargs):
         if spiking:
             return self.call_dynamic(x, **kwargs)
 
@@ -169,7 +168,7 @@ class PhasorDense(hk.Module):
         imag = complex(0.0, 1.0)
         xz = jnp.exp(imag * pi * x)
         #mask all inputs inside the arc of the mask angle
-        if self.mask_angle > 0.0:
+        if mask_angle > 0.0:
             mask = jnp.greater_equal(jnp.abs(x), self.mask_angle)
             xz = xz * mask
         
@@ -181,7 +180,7 @@ class PhasorDense(hk.Module):
         z = jnp.matmul(xz, wz) + bz
         y = phasor_act(z)
         #mask all outputs inside the arc of the mask angle
-        if self.mask_angle > 0.0:
+        if mask_angle > 0.0:
             mask = jnp.greater_equal(jnp.abs(y), self.mask_angle)
             y = y * mask
         
@@ -196,6 +195,7 @@ class PhasorDense(hk.Module):
                         threshold: float = 0.05,
                         gpu: bool = True,
                         offset: float = 0.0,
+                        mask_angle: float = -1.0,
                         **kwargs):
         
         indices, times, full_shape = x
@@ -233,8 +233,8 @@ class PhasorDense(hk.Module):
         y = find_spikes(solution, threshold=threshold)
 
         #exclude spikes from the inhibitory period if mask angle is being used
-        if self.mask_angle > 0.0:
-            y = inhibit_midpoint(y, self.mask_angle, 1.0, offset=offset)
+        if mask_angle > 0.0:
+            y = inhibit_midpoint(y, mask_angle, 1.0, offset=offset)
 
         return y
 
