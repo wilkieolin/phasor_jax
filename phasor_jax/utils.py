@@ -242,6 +242,14 @@ def normalize_PCM16(x):
     sig_16_max = 2 ** 15 - 1
     return x / sig_16_max
     
+def quadrature_loss(phases: jnp.ndarray, labels: jnp.ndarray, num_classes: int):
+    """
+    Return how dissimilar the output is to a vector of zeros except the correct class
+    which is at an angle of pi / 2.
+    """
+    targets = jax.nn.one_hot(labels, num_classes)
+    sim = similarity(phases, targets)
+    return 1.0 - sim
 
 def remap_phase(x):
     """
