@@ -169,7 +169,7 @@ class PhasorDense(hk.Module):
         xz = jnp.exp(imag * pi * x)
         #mask all inputs inside the arc of the mask angle
         if mask_angle > 0.0:
-            mask = jnp.greater_equal(jnp.abs(x), self.mask_angle)
+            mask = jnp.greater_equal(jnp.abs(x), mask_angle)
             xz = xz * mask
         
         #convert weights to complex
@@ -181,7 +181,7 @@ class PhasorDense(hk.Module):
         y = phasor_act(z)
         #mask all outputs inside the arc of the mask angle
         if mask_angle > 0.0:
-            mask = jnp.greater_equal(jnp.abs(y), self.mask_angle)
+            mask = jnp.greater_equal(jnp.abs(y), mask_angle)
             y = y * mask
         
         return y
