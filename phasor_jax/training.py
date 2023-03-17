@@ -44,7 +44,7 @@ def load_dataset(dataset_name: str,
                     batch_size=-1,
                     with_info=False))[0]
 
-    return iter(tfds.as_numpy(ds)), x_full, y_full
+    return tfds.as_numpy(ds), x_full, y_full
 
 def scale_mnist(images):
     """Convert int8 based values to normalized floats"""
@@ -71,8 +71,20 @@ def accuracy_quadrature(net, key, params, images, labels, **kwargs):
     """
 
     yhat = net.apply(params, key, images, **kwargs)
-    yhat = jnp.argmin(jnp.abs(yhat - 0.5), axis=1)
-    return yhat == labels
+
+    def accuracy_inner(phases):
+        predictions = jnp.argmin(jnp.abs(phases - 0.5), axis=1)
+        return predictions == labels
+
+    #for non-spiking output
+    if len(yhat == 2):
+        accuracy = accuracy_inner(yhat)
+    else:
+        #for spiking output with multiple cycles
+        accuracy = vmap(accuracy_inner, in_axes=(0,1))(yhat)
+
+    
+    return accuracy
 
 def update_params(model: hk.Transformed, 
                 key,

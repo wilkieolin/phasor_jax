@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from tqdm import tqdm
-from phasor_jax.utils import SpikeTrain
+from einops import rearrange
 from collections import namedtuple
 
 SpikeTrain = namedtuple("SpikeTrain", ["indices", "times", "full_shape"])
@@ -67,7 +67,7 @@ def dz_dt(current_fn,
 
     return dz
 
-def dz_dt_gpu(current_fn: function, 
+def dz_dt_gpu(current_fn, 
             t: float, 
             z: jnp.ndarray, 
             weight = None, 
@@ -188,7 +188,7 @@ def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarr
 
 
 
-def phase_to_train(x, period: float = 1.0, repeats: int = 3):
+def phase_to_train(x: np.ndarray, period: float = 1.0, repeats: int = 3) -> SpikeTrain:
     """
     Given a series of input phases defined as a real tensor, convert these values to a 
     temporal spike train: (list of indices, list of firing times, original tensor shape)
@@ -226,7 +226,8 @@ def phase_to_train(x, period: float = 1.0, repeats: int = 3):
 
     times += offsets
     
-    return (inds, times, shape)
+    spikes = SpikeTrain(inds, times, shape)
+    return spikes
 
 def solve_heun(dz, times, dt, init_val):
     """
@@ -267,8 +268,11 @@ def time_to_phase(times, period):
     times = (times - 0.5) * 2.0
     return times
 
-def train_to_phase(spikes, period: float = 1.0, offset: float = 0.0):
-    inds, times, full_shape = spikes
+def train_to_phase(spikes: SpikeTrain, period: float = 1.0, offset: float = 0.0):
+    inds = spikes.indices
+    times = spikes.times
+    full_shape = spikes.full_shape
+
     #unravel the indices
     inds = np.unravel_index(inds, full_shape)
 

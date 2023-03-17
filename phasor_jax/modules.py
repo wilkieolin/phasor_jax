@@ -149,7 +149,7 @@ class PhasorDense(hk.Module):
     mask_angle: float, half-angle of arc subtended from 0* which masks inputs. used for sparse layers.
     """
 
-    def __init__(self, output_size, w_init, mask_angle: float = -1.0, name=None):
+    def __init__(self, output_size, w_init, name=None):
         super().__init__(name=name)
         self.output_size = output_size
         self.w_init = w_init
