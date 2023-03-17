@@ -77,14 +77,16 @@ def accuracy_quadrature(net, key, params, images, labels, **kwargs):
         return predictions == labels
 
     #for non-spiking output
-    if len(yhat == 2):
+    if len(yhat.shape) == 2:
         accuracy = accuracy_inner(yhat)
     else:
         #for spiking output with multiple cycles
-        accuracy = vmap(accuracy_inner, in_axes=(0,1))(yhat)
+        yhat = rearrange(yhat, "a b c -> c a b")
+        accuracy = vmap(accuracy_inner)(yhat)
 
     
     return accuracy
+
 
 def update_params(model: hk.Transformed, 
                 key,
