@@ -187,7 +187,7 @@ class PhasorDense(hk.Module):
         return y
 
     def call_dynamic(self, 
-                        x, 
+                        x: SpikeTrain, 
                         t_box: float = 0.03, 
                         t_step: float = 0.01, 
                         t_range = (0.0, 10.0), 
@@ -198,7 +198,7 @@ class PhasorDense(hk.Module):
                         mask_angle: float = -1.0,
                         **kwargs):
         
-        indices, times, full_shape = x
+        full_shape = x.full_shape
 
         #access the weights / biases
         n_batch, n_input = full_shape
