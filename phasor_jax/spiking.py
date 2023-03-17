@@ -2,9 +2,25 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from tqdm import tqdm
-        
-def current(x, active_inds, t, t_step):
-    _, _, full_shape = x
+from phasor_jax.utils import SpikeTrain
+from collections import namedtuple
+
+SpikeTrain = namedtuple("SpikeTrain", ["indices", "times", "full_shape"])
+
+class ODESolution():
+    """
+    Dummy class to provide right structure of outputs for solutions
+    """
+    def __init__(self):
+        self.t = np.array([])
+        self.y = np.array([])
+
+def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
+    """
+    Given the spike train, times at which inputs will be active in a given solution,
+    current time and time step, return the currents at the given moment.
+    """
+    full_shape = x.full_shape
     
     currents = np.zeros(full_shape)
     #access which neurons are active now
@@ -14,7 +30,11 @@ def current(x, active_inds, t, t_step):
     
     return currents
 
-def define_tgrid(t_span, t_step):
+def define_tgrid(t_span: float, t_step: float) -> np.ndarray:
+    """
+    Given the starting and ending times, create the steps over which currents
+    will be solved numerically.
+    """
     #calculate the solver grid
     t_start, t_stop = t_span
     n_points = int(np.ceil(t_stop / t_step) + 1) 
@@ -47,9 +67,9 @@ def dz_dt(current_fn,
 
     return dz
 
-def dz_dt_gpu(current_fn, 
-            t, 
-            z, 
+def dz_dt_gpu(current_fn: function, 
+            t: float, 
+            z: jnp.ndarray, 
             weight = None, 
             bias = None, 
             leakage: float = -0.2, 
@@ -68,11 +88,11 @@ def dz_dt_gpu(current_fn,
     currents = currents + bias
     #update the previous potential and add the currents
     dz = k * z + arbscale * currents
-    dz = np.array(dz)
+    dz = jnp.array(dz)
 
     return dz
 
-def find_spikes(sol, threshold: float = 2e-3, sparsity: float = -1.0):
+def find_spikes(sol: ODESolution, threshold: float = 2e-3, sparsity: float = -1.0) -> SpikeTrain:
     """
     'Gradient' method for spike detection. Finds where voltages (imaginary component of complex R&F potential) 
     reaches a local minimum & are above a threshold, stores the corresponding time. Sparsity applies a dynamic
@@ -113,9 +133,10 @@ def find_spikes(sol, threshold: float = 2e-3, sparsity: float = -1.0):
     shape = spks.shape[0:-1]
     spks_r = [np.ravel_multi_index(spks_i, shape)]
 
-    return (spks_r, spks_t, shape)
+    spikes = SpikeTrain(spks_r, spks_t, shape)
+    return spikes
 
-def inhibit_midpoint(x, mask_angle: float = 0.0, period: float = 1.0, offset: float = 0.0):
+def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0, offset: float = 0.0):
     """
     Given a spike train, remove any spikes occuring within an inhibitory stage
     defined around the center of a period. 
@@ -124,7 +145,9 @@ def inhibit_midpoint(x, mask_angle: float = 0.0, period: float = 1.0, offset: fl
     if mask_angle <= 0.0:
         return x
 
-    inds, times, full_shape = x
+    inds = x.indices
+    times = x.times
+    full_shape = x.full_shape
 
     #adjust times by the offset
     adj_times = times + offset
@@ -138,14 +161,17 @@ def inhibit_midpoint(x, mask_angle: float = 0.0, period: float = 1.0, offset: fl
     inds = [inds[0][non_inhibited]]
     times = times[non_inhibited]
 
-    return (inds, times, full_shape)
+    spikes = SpikeTrain(inds, times, full_shape)
+    return spikes
 
-def generate_active(x, t_grid, t_box):
+def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarray:
     """
     Given the time grid which is being solved over, generate an array which contains the
     active (spiking) neurons at each time step.
     """
-    inds, times, full_shape = x
+    inds = x.indices
+    times = x.times
+    full_shape = x.full_shape
     
     active_inds = []
     
@@ -160,13 +186,7 @@ def generate_active(x, t_grid, t_box):
         
     return active_inds
 
-class ODESolution():
-    """
-    Dummy class to provide right structure of outputs for solutions
-    """
-    def __init__(self):
-        self.t = np.array([])
-        self.y = np.array([])
+
 
 def phase_to_train(x, period: float = 1.0, repeats: int = 3):
     """
