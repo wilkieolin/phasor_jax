@@ -30,6 +30,20 @@ def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
     
     return currents
 
+def dphase_min(phases: jnp.ndarray):
+    """
+    Return phases from a spiking output in which the outputs
+    change the least.
+    """
+    #get the difference in phases between cycles
+    dphase = jnp.diff(phases, axis=2)
+    #find for all images and phases, the lowest average change
+    dphase_mean = jnp.mean(rearrange(dphase, "a b c -> (a b) c"), axis=0)
+    min_period = jnp.argmin(jnp.abs(dphase_mean))
+
+    return int(min_period)
+
+
 def define_tgrid(t_span: float, t_step: float) -> np.ndarray:
     """
     Given the starting and ending times, create the steps over which currents
@@ -186,7 +200,9 @@ def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarr
         
     return active_inds
 
-
+def matrix_sparsity(x: jnp.ndarray) -> float:
+    sparsity = jnp.sum(x == 0.0) / np.prod(x.shape)
+    return sparsity
 
 def phase_to_train(x: np.ndarray, period: float = 1.0, repeats: int = 3) -> SpikeTrain:
     """
