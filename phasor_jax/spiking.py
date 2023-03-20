@@ -260,6 +260,15 @@ def solve_heun(dz, times, dt, init_val):
 
     return solution
 
+def spiking_sparsity(x: SpikeTrain, period: float = 1.0):
+    end_time = np.max(x.times)
+    periods = np.ceil(end_time) // period
+    total_spikes = len(x.times)
+    total_neurons = np.prod(x.full_shape)
+
+    sparsity = total_spikes / (total_neurons * periods)
+    return sparsity
+
 def time_to_phase(times, period):
     """
     Given a list of absolute times, use the period to convert them into phases.
