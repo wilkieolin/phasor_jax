@@ -156,7 +156,7 @@ class PhasorDense(hk.Module):
         
     def __call__(self, x, spiking: bool = False, mask_angle: float = -1.0, **kwargs):
         if spiking:
-            return self.call_dynamic(x, **kwargs)
+            return self.call_dynamic(x, mask_angle=mask_angle, **kwargs)
 
         #access the weights / biases
         j, k = x.shape[-1], self.output_size
@@ -196,6 +196,7 @@ class PhasorDense(hk.Module):
                         gpu: bool = True,
                         offset: float = 0.0,
                         mask_angle: float = -1.0,
+                        return_solution: bool = False,
                         **kwargs):
         
         full_shape = x.full_shape
@@ -224,10 +225,13 @@ class PhasorDense(hk.Module):
             dz_fn = lambda t, z: dz_dt(current_fn, t, z, weight=w, bias=bz, **kwargs)
 
         #integrate through time
-        if self.name is not None:
-            print("Solving layer", self.name)
+        # if self.name is not None:
+        #     print("Solving layer", self.name)
 
         solution = solve_heun(dz_fn, t_grid, t_step, z_init)
+
+        if return_solution:
+            return solution
 
         #find and return the spikes produced
         y = find_spikes(solution, threshold=threshold)

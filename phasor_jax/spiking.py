@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tqdm import tqdm
 from einops import rearrange
 from collections import namedtuple
 
@@ -42,6 +41,20 @@ def dphase_min(phases: jnp.ndarray):
     min_period = jnp.argmin(jnp.abs(dphase_mean))
 
     return int(min_period)
+
+def dphase_postmax(phases: jnp.ndarray):
+    """
+    Return phases from a spiking output in the cycle after they have 
+    changed the most.
+    """
+    #get the difference in phases between cycles
+    dphase = jnp.diff(phases, axis=2)
+    #find for all images and phases, the lowest average change
+    dphase_mean = jnp.mean(rearrange(dphase, "a b c -> (a b) c"), axis=0)
+    max_period = int(jnp.argmax(jnp.abs(dphase_mean)))
+    postmax = max_period + 1
+
+    return postmax
 
 
 def define_tgrid(t_span: float, t_step: float) -> np.ndarray:
@@ -164,7 +177,7 @@ def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0
     full_shape = x.full_shape
 
     #adjust times by the offset
-    adj_times = times + offset
+    adj_times = times - offset
     #take modulo over period
     phases = time_to_phase(adj_times, period)
     #find the phases not within the exclusion angle/inhibitory period
@@ -200,11 +213,11 @@ def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarr
         
     return active_inds
 
-def matrix_sparsity(x: jnp.ndarray) -> float:
-    sparsity = jnp.sum(x == 0.0) / np.prod(x.shape)
+def matrix_usage(x: jnp.ndarray) -> float:
+    sparsity = jnp.sum(x != 0.0) / np.prod(x.shape)
     return sparsity
 
-def phase_to_train(x: np.ndarray, period: float = 1.0, repeats: int = 3) -> SpikeTrain:
+def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3) -> SpikeTrain:
     """
     Given a series of input phases defined as a real tensor, convert these values to a 
     temporal spike train: (list of indices, list of firing times, original tensor shape)
@@ -216,7 +229,7 @@ def phase_to_train(x: np.ndarray, period: float = 1.0, repeats: int = 3) -> Spik
     x = x.ravel()
 
     #list and repeat the index 
-    inds = np.nonzero(x)
+    inds = np.arange(len(x))
 
     #list the time offset for each index and repeat it for repeats cycles
     times = x[inds]
@@ -235,12 +248,14 @@ def phase_to_train(x: np.ndarray, period: float = 1.0, repeats: int = 3) -> Spik
     #tile across time
     inds = [np.tile(inds[0], (repeats))]
     times = np.tile(times, (repeats))
-        
-    #create a list of time offsets to move spikes forward by T for repetitions
-    offsets = np.arange(0, repeats, dtype=dtype) * period
-    offsets = np.repeat(offsets, n_t)
 
-    times += offsets
+    if repeats > 1:
+        
+        #create a list of time offsets to move spikes forward by T for repetitions
+        offsets = np.arange(0, repeats, dtype=dtype) * period
+        offsets = np.repeat(offsets, n_t)
+
+        times = offsets + times
     
     spikes = SpikeTrain(inds, times, shape)
     return spikes
@@ -258,7 +273,7 @@ def solve_heun(dz, times, dt, init_val):
     y[...,0] = init_val
     
     #iterate through
-    for (i,t) in enumerate(tqdm(times)):
+    for (i,t) in enumerate(times):
         #skip solving at the initial condition
         if i == 0:
             continue
@@ -276,20 +291,20 @@ def solve_heun(dz, times, dt, init_val):
 
     return solution
 
-def spiking_sparsity(x: SpikeTrain, period: float = 1.0):
+def spiking_rate(x: SpikeTrain, period: float = 1.0):
     end_time = np.max(x.times)
     periods = np.ceil(end_time) // period
     total_spikes = len(x.times)
     total_neurons = np.prod(x.full_shape)
 
-    sparsity = total_spikes / (total_neurons * periods)
-    return sparsity
+    rate = total_spikes / (total_neurons * periods)
+    return rate
 
-def time_to_phase(times, period):
+def time_to_phase(times, period: float = 1.0, offset: float = 0.0):
     """
     Given a list of absolute times, use the period to convert them into phases.
     """
-    times = times % period
+    times = (times - offset) % period
     times = (times - 0.5) * 2.0
     return times
 
@@ -313,7 +328,7 @@ def train_to_phase(spikes: SpikeTrain, period: float = 1.0, offset: float = 0.0)
     #make a new copy of times
     times = np.array(times)
     #offset all times according to a global reference
-    times += offset
+    times -= offset
     
     cycle = (times // period).astype("int")
     
