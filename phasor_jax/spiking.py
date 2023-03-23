@@ -33,14 +33,15 @@ def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
     
     return currents
 
-def bias_current(t: float, b: float, offset: float, period: float = 1.0, t_box: float = 0.03):
+def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, t_box: float = 0.03):
     t_bias = period / 2.0
     t_cycle = (t - offset) % period
-    cond = lambda x: (x > t_bias - t_box) * (x < t + t_box)
+    cond = lambda t: (t > (t_bias - t_box)) * (t < (t_bias + t_box))
+    
     if cond(t_cycle):
-        return b
+        return bz
     else:
-        return jnp.zeros((1))
+        return jnp.zeros_like(bz)
 
 
 def dphase_min(phases: jnp.ndarray):
