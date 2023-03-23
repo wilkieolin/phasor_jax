@@ -192,14 +192,15 @@ class PhasorDense(hk.Module):
                         t_step: float = 0.01, 
                         t_range = (0.0, 10.0), 
                         z_init = None,
+                        period: float = 1.0,
                         threshold: float = 0.05,
                         gpu: bool = True,
-                        offset: float = 0.0,
                         mask_angle: float = -1.0,
                         return_solution: bool = False,
                         **kwargs):
         
         full_shape = x.full_shape
+        offset = x.offset
 
         #access the weights / biases
         n_batch, n_input = full_shape
@@ -218,11 +219,12 @@ class PhasorDense(hk.Module):
         t_grid = define_tgrid(t_range, t_step)
         active_inds = generate_active(x, t_grid, t_box)
         current_fn = lambda t: current(x, active_inds, t, t_step)
+        bias_fn = lambda t: bias_current(t, bz, offset, period, t_box)
         #define the differential update
         if gpu:
-            dz_fn = lambda t, z: dz_dt_gpu(current_fn, t, z, weight=w, bias=bz, **kwargs)
+            dz_fn = lambda t, z: dz_dt_gpu(current_fn, bias_fn, t, z, weight=w, **kwargs)
         else:
-            dz_fn = lambda t, z: dz_dt(current_fn, t, z, weight=w, bias=bz, **kwargs)
+            dz_fn = lambda t, z: dz_dt(current_fn, bias_fn, t, z, weight=w, **kwargs)
 
         #integrate through time
         # if self.name is not None:
@@ -234,11 +236,11 @@ class PhasorDense(hk.Module):
             return solution
 
         #find and return the spikes produced
-        y = find_spikes(solution, threshold=threshold)
+        y = find_spikes(solution, threshold=threshold, offset=offset)
 
         #exclude spikes from the inhibitory period if mask angle is being used
         if mask_angle > 0.0:
-            y = inhibit_midpoint(y, mask_angle, 1.0, offset=offset)
+            y = inhibit_midpoint(y, mask_angle, 1.0)
 
         return y
 

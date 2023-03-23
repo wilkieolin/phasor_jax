@@ -4,7 +4,11 @@ import numpy as np
 from einops import rearrange
 from collections import namedtuple
 
-SpikeTrain = namedtuple("SpikeTrain", ["indices", "times", "full_shape"])
+SpikeTrain = namedtuple("SpikeTrain",
+                         ["indices", 
+                          "times", 
+                          "full_shape",
+                          "offset"])
 
 class ODESolution():
     """
@@ -28,6 +32,16 @@ def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
     currents[active] += 1.0
     
     return currents
+
+def bias_current(t: float, b: float, offset: float, period: float = 1.0, t_box: float = 0.03):
+    t_bias = period / 2.0
+    t_cycle = (t - offset) % period
+    cond = lambda x: (x > t_bias - t_box) * (x < t + t_box)
+    if cond(t_cycle):
+        return b
+    else:
+        return jnp.zeros((1))
+
 
 def dphase_min(phases: jnp.ndarray):
     """
@@ -70,10 +84,10 @@ def define_tgrid(t_span: float, t_step: float) -> np.ndarray:
     return times
 
 def dz_dt(current_fn, 
+          bias_fn,
             t, 
             z, 
             weight = None, 
-            bias = None, 
             leakage: float = -0.2, 
             ang_freq: float = 2 * np.pi,
             arbscale: float = 1.0,):
@@ -87,7 +101,7 @@ def dz_dt(current_fn,
     #multiply current by the weights
     currents = np.matmul(current_fn(t), weight, dtype="complex128")
     #add the bias
-    currents += bias
+    currents += bias_fn(t)
 
     #update the previous potential and add the currents
     dz = k * z + arbscale * currents
@@ -95,10 +109,10 @@ def dz_dt(current_fn,
     return dz
 
 def dz_dt_gpu(current_fn, 
+              bias_fn,
             t: float, 
             z: jnp.ndarray, 
             weight = None, 
-            bias = None, 
             leakage: float = -0.2, 
             ang_freq: float = 2 * np.pi,
             arbscale: float = 1.0,):
@@ -112,14 +126,14 @@ def dz_dt_gpu(current_fn,
     #multiply current by the weights
     currents = jnp.matmul(current_fn(t), weight)
     #add the bias
-    currents = currents + bias
+    currents = currents + bias_fn(t)
     #update the previous potential and add the currents
     dz = k * z + arbscale * currents
     dz = jnp.array(dz)
 
     return dz
 
-def find_spikes(sol: ODESolution, threshold: float = 2e-3, sparsity: float = -1.0) -> SpikeTrain:
+def find_spikes(sol: ODESolution, offset: float, threshold: float = 2e-3, sparsity: float = -1.0) -> SpikeTrain:
     """
     'Gradient' method for spike detection. Finds where voltages (imaginary component of complex R&F potential) 
     reaches a local minimum & are above a threshold, stores the corresponding time. Sparsity applies a dynamic
@@ -160,14 +174,17 @@ def find_spikes(sol: ODESolution, threshold: float = 2e-3, sparsity: float = -1.
     shape = spks.shape[0:-1]
     spks_r = [np.ravel_multi_index(spks_i, shape)]
 
-    spikes = SpikeTrain(spks_r, spks_t, shape)
+    spikes = SpikeTrain(spks_r, spks_t, shape, offset + 0.25)
     return spikes
 
-def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0, offset: float = 0.0):
+def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0):
     """
     Given a spike train, remove any spikes occuring within an inhibitory stage
     defined around the center of a period. 
     """
+
+    offset = x.offset
+
     #pass the method for no inhibitory period
     if mask_angle <= 0.0:
         return x
@@ -188,7 +205,7 @@ def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0
     inds = [inds[0][non_inhibited]]
     times = times[non_inhibited]
 
-    spikes = SpikeTrain(inds, times, full_shape)
+    spikes = SpikeTrain(inds, times, full_shape, offset)
     return spikes
 
 def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarray:
@@ -217,7 +234,7 @@ def matrix_usage(x: jnp.ndarray) -> float:
     sparsity = jnp.sum(x != 0.0) / np.prod(x.shape)
     return sparsity
 
-def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3) -> SpikeTrain:
+def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3, offset: float = 0.0) -> SpikeTrain:
     """
     Given a series of input phases defined as a real tensor, convert these values to a 
     temporal spike train: (list of indices, list of firing times, original tensor shape)
@@ -257,7 +274,7 @@ def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3) -> Spi
 
         times = offsets + times
     
-    spikes = SpikeTrain(inds, times, shape)
+    spikes = SpikeTrain(inds, times, shape, offset)
     return spikes
 
 def solve_heun(dz, times, dt, init_val):
@@ -308,10 +325,11 @@ def time_to_phase(times, period: float = 1.0, offset: float = 0.0):
     times = (times - 0.5) * 2.0
     return times
 
-def train_to_phase(spikes: SpikeTrain, period: float = 1.0, offset: float = 0.0):
+def train_to_phase(spikes: SpikeTrain, period: float = 1.0):
     inds = spikes.indices
     times = spikes.times
     full_shape = spikes.full_shape
+    offset = spikes.offset
 
     #unravel the indices
     inds = np.unravel_index(inds, full_shape)
