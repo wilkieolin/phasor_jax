@@ -229,7 +229,7 @@ def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3) -> Spi
     x = x.ravel()
 
     #list and repeat the index 
-    inds = np.arange(len(x))
+    inds = (np.arange(len(x)),)
 
     #list the time offset for each index and repeat it for repeats cycles
     times = x[inds]
