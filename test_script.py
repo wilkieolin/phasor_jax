@@ -82,8 +82,6 @@ def mlp(x,
 
     if spiking: 
         p = train_to_phase(x)
-        best_cycle = dphase_postmax(p)
-        p = p[:,:,best_cycle]
 
         return p, outputs
     else:
@@ -155,7 +153,7 @@ def test_spiking():
     predictions_spk = jnp.concatenate([r[0] for r in result_spk])
     #get the overall accuracy
     accuracy_spk = accuracy_quadrature(predictions_spk, y_test)
-    acc_spk = np.mean(accuracy_spk)
+    acc_spk = np.mean(accuracy_spk, axis=0)
     #get the sparsity at each layer & save
     batch_usage_spk = np.stack([np.array(list(map(spiking_rate, r[1]))) for r in result_spk])
     avg_usage_spk = np.mean(batch_usage_spk, axis=0)

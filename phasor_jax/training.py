@@ -81,6 +81,7 @@ def accuracy_quadrature(yhat, y):
         #for spiking output with multiple cycles
         yhat = rearrange(yhat, "a b c -> c a b")
         accuracy = vmap(accuracy_inner)(yhat)
+        accuracy = rearrange(accuracy, "c a -> a c")
 
     
     return accuracy
