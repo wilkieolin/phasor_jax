@@ -1,11 +1,11 @@
 import haiku as hk
-import jax
 import jax.random as jrnd
 import jax.numpy as jnp
 import numpy as np
 import optax
 import pickle as p
 import argparse
+import pandas as pd
 
 from phasor_jax.modules import *
 from phasor_jax.utils import *
@@ -20,6 +20,8 @@ parser.add_argument("--dataset", type=str, default="fashion_mnist")
 parser.add_argument("--n_batch", type=int, default=128)
 parser.add_argument("--prng_seed", type=int, default=42)
 parser.add_argument("--n_batches", type=int, default=1000)
+parser.add_argument("--params_file", type=str, default=None)
+parser.add_argument("--mask_angle", type=float, default=0.0)
 
 args = parser.parse_args()
 n_layers = args.n_layers
@@ -27,6 +29,8 @@ dataset = args.dataset
 n_batch = args.n_batch
 prng_seed = args.prng_seed
 n_batches = args.n_batches
+params_file = args.params_file
+mask_angle = args.mask_angle
 #add more time for deeper layers to propagate
 t_exec = 9.75 + 0.25 * n_layers
 
@@ -98,60 +102,72 @@ key, subkey = jrnd.split(key)
 params = model.init(subkey, x_train[0:10,...], n_layers = n_layers)
 
 """
-Train the model
+Train the model if necessary
 """
-#create an instance of the RMSprop optimizer
-opt = optax.rmsprop(0.001)
-loss_fn = lambda yh, y: quadrature_loss(yh, y, num_classes=10)
+if params_file is None:
+    #create an instance of the RMSprop optimizer
+    opt = optax.rmsprop(0.001)
+    loss_fn = lambda yh, y: quadrature_loss(yh, y, num_classes=10)
 
-params_t, losses = train_model(model, 
-                               key, 
-                               params = params, 
-                               dataset = train, 
-                               optimizer = opt, 
-                               loss_fn = loss_fn, 
-                               batches = n_batches,
-                               n_layers = n_layers)
+    params_t, losses = train_model(model, 
+                                key, 
+                                params = params, 
+                                dataset = train, 
+                                optimizer = opt, 
+                                loss_fn = loss_fn, 
+                                batches = n_batches,
+                                n_layers = n_layers)
+    
+else:
+    params_t = p.load(open(params_file))
 
 """
 Test performance
 """
 #define a labmda to compute accuracy we can dispatch over batches
-eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers)
-eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spiking = True)
+eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
+eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle, spiking = True)
+
 
 all_results = {}
 
-#compute the test set accuracy
-result = [eval_fn(b['image']) for b in iter(test_ds)]
-predictions = jnp.concatenate([r[0] for r in result])
-#get the overall accuracy
-accuracy = accuracy_quadrature(predictions, y_test)
-acc = np.mean(accuracy)
-#get the sparsity at each layer & save
-batch_usage = np.stack([np.array(list(map(matrix_usage, r[1]))) for r in result])
-avg_usage = np.mean(batch_usage, axis=0)
+def test_normal():
+    #compute the test set accuracy
+    result = [eval_fn(b['image']) for b in iter(test_ds)]
+    predictions = jnp.concatenate([r[0] for r in result])
+    #get the overall accuracy
+    accuracy = accuracy_quadrature(predictions, y_test)
+    acc = np.mean(accuracy)
+    #get the sparsity at each layer & save
+    batch_usage = np.stack([np.array(list(map(matrix_usage, r[1]))) for r in result])
+    avg_usage = np.mean(batch_usage, axis=0)
+    return acc, avg_usage
+
+acc, avg_usage = test_normal()
 
 print("Test accuracy: ", acc)
 all_results["accuracy"] = acc
-all_results["phases"] = predictions
 all_results["matrix usage"] = avg_usage
 
-#repeat the process with spiking output
-result_spk = [eval_fn_spk(b['image']) for b in tqdm(iter(test_ds))]
-predictions_spk = jnp.concatenate([r[0] for r in result])
-#get the overall accuracy
-best_phase = dphase_postmax(predictions_spk)
-accuracy_spk = accuracy_quadrature(predictions_spk[..., best_phase], y_test)
-acc_spk = np.mean(accuracy_spk)
-#get the sparsity at each layer & save
-batch_usage_spk = np.stack([np.array(list(map(spiking_rate, r[1]))) for r in result])
-avg_usage_spk = np.mean(batch_usage, axis=0)
+def test_spiking():
+    #repeat the process with spiking output
+    result_spk = [eval_fn_spk(b['image']) for b in tqdm(iter(test_ds))]
+    predictions_spk = jnp.concatenate([r[0] for r in result_spk])
+    #get the overall accuracy
+    accuracy_spk = accuracy_quadrature(predictions_spk, y_test)
+    acc_spk = np.mean(accuracy_spk)
+    #get the sparsity at each layer & save
+    batch_usage_spk = np.stack([np.array(list(map(spiking_rate, r[1]))) for r in result_spk])
+    avg_usage_spk = np.mean(batch_usage_spk, axis=0)
+    return acc_spk, avg_usage_spk
+
+acc_spk, avg_usage_spk = test_spiking()
 
 print("Spiking accuracy: ", acc_spk)
 all_results["accuracy_spiking"] = acc_spk
-all_results["phases_spk"] = predictions_spk
 all_results["firing rates"] = avg_usage_spk
 
-filename = "phasor_" + str(n_layers) + "_layers" + dataset
-p.dump(open(filename, "wb"), all_results)
+filename = "phasor_" + str(n_layers) + "_layers_angle_" + str(mask_angle) + ".p"
+
+with open(filename, 'wb') as file:
+    p.dump(all_results, file)
