@@ -1,0 +1,157 @@
+import haiku as hk
+import jax
+import jax.random as jrnd
+import jax.numpy as jnp
+import numpy as np
+import optax
+import pickle as p
+import argparse
+
+from phasor_jax.modules import *
+from phasor_jax.utils import *
+from phasor_jax.training import *
+
+"""
+Get command line arguments.
+"""
+parser = argparse.ArgumentParser(description="Test spiking execution of phasor network.")
+parser.add_argument("--n_layers", type=int, default=1)
+parser.add_argument("--dataset", type=str, default="fashion_mnist")
+parser.add_argument("--n_batch", type=int, default=128)
+parser.add_argument("--prng_seed", type=int, default=42)
+parser.add_argument("--n_batches", type=int, default=1000)
+
+args = parser.parse_args()
+n_layers = args.n_layers
+dataset = args.dataset
+n_batch = args.n_batch
+prng_seed = args.prng_seed
+n_batches = args.n_batches
+#add more time for deeper layers to propagate
+t_exec = 9.75 + 0.25 * n_layers
+
+"""
+Load the dataset.
+"""
+train_ds, x_train, y_train = load_dataset(dataset, split="train", is_training=True, batch_size=n_batch)
+train = iter(train_ds)
+
+#Load the testing dataset
+test_ds, x_test, y_test = load_dataset(dataset, split="test", is_training=False, repeat = False, batch_size=n_batch)
+test = iter(test_ds)
+
+"""
+Define the model.
+"""
+
+def mlp(x, 
+           n_layers: int = 1,
+           n_hidden: int = 128,
+           vsa_dimension: int = 1024,
+           spiking: bool = False,
+           repeats: int = 3,
+           is_training: bool = False,
+           **kwargs):
+    """
+    Simple MLP model with scalable number of hidden layers
+    """
+    
+    x = scale_mnist(x)
+    #project into VSA
+    x = ProjectAll(vsa_dimension)(x)
+    x = layer_norm(x)
+
+    if spiking:
+        x = phase_to_train(x, repeats=repeats)
+    
+    outputs = []
+    for i in range(n_layers):
+        x = conv_1d(n_hidden)(x, spiking=spiking, **kwargs)
+        outputs.append(x)
+
+    x = conv_1d(10)(x,  spiking=spiking, **kwargs)
+    outputs.append(x)
+
+    #only return the single output if training
+    if is_training:
+        return x
+
+    if spiking: 
+        p = train_to_phase(x)
+        best_cycle = dphase_postmax(p)
+        p = p[:,:,best_cycle]
+
+        return p, outputs
+    else:
+
+        return x, outputs
+
+"""
+Initialize the model
+"""
+#declare the model as a transformation
+model = hk.transform(mlp)
+
+#split the key and use it to create the model's initial parameters
+key = jrnd.PRNGKey(prng_seed)
+key, subkey = jrnd.split(key)
+params = model.init(subkey, x_train[0:10,...], n_layers = n_layers)
+
+"""
+Train the model
+"""
+#create an instance of the RMSprop optimizer
+opt = optax.rmsprop(0.001)
+loss_fn = lambda yh, y: quadrature_loss(yh, y, num_classes=10)
+
+params_t, losses = train_model(model, 
+                               key, 
+                               params = params, 
+                               dataset = train, 
+                               optimizer = opt, 
+                               loss_fn = loss_fn, 
+                               batches = n_batches,
+                               n_layers = n_layers)
+
+"""
+Test performance
+"""
+#define a labmda to compute accuracy we can dispatch over batches
+eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers)
+eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spiking = True)
+
+all_results = {}
+
+#compute the test set accuracy
+result = [eval_fn(b['image']) for b in iter(test_ds)]
+predictions = jnp.concatenate([r[0] for r in result])
+#get the overall accuracy
+accuracy = accuracy_quadrature(predictions, y_test)
+acc = np.mean(accuracy)
+#get the sparsity at each layer & save
+batch_usage = np.stack([np.array(list(map(matrix_usage, r[1]))) for r in result])
+avg_usage = np.mean(batch_usage, axis=0)
+
+print("Test accuracy: ", acc)
+all_results["accuracy"] = acc
+all_results["phases"] = predictions
+all_results["matrix usage"] = avg_usage
+
+#repeat the process with spiking output
+result_spk = [eval_fn_spk(b['image']) for b in tqdm(iter(test_ds))]
+predictions_spk = jnp.concatenate([r[0] for r in result])
+#get the overall accuracy
+best_phase = dphase_postmax(predictions_spk)
+accuracy_spk = accuracy_quadrature(predictions_spk[..., best_phase], y_test)
+acc_spk = np.mean(accuracy_spk)
+#get the sparsity at each layer & save
+batch_usage_spk = np.stack([np.array(list(map(spiking_rate, r[1]))) for r in result])
+avg_usage_spk = np.mean(batch_usage, axis=0)
+
+print("Spiking accuracy: ", acc_spk)
+all_results["accuracy_spiking"] = acc_spk
+all_results["phases_spk"] = predictions_spk
+all_results["firing rates"] = avg_usage_spk
+
+filename = "phasor_" + str(n_layers) + "_layers" + dataset
+p.dump(open(filename, "wb"), all_results)

@@ -179,4 +179,3 @@ def train_model(model,
     new_params = hk.data_structures.merge(trainable_params, non_trainable_params)
 
     return new_params, loss_history
-
