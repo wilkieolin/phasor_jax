@@ -117,7 +117,7 @@ if params_file is None:
                                 n_layers = n_layers)
     
 else:
-    params_t = p.load(open(params_file))
+    params_t = p.load(open(params_file, "rb"))
 
 """
 Test performance
