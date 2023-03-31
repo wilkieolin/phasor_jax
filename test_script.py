@@ -148,10 +148,29 @@ print("Test accuracy: ", acc)
 all_results["accuracy"] = acc
 all_results["matrix usage"] = avg_usage
 
+
+def pad_outputs(phases):
+    """
+    Pad spiking outputs to a consistent shape for concatenation.
+    """
+    shapes = np.array([p.shape[2] for p in phases])
+    max = np.max(shapes)
+    padding = max -  shapes
+    print(padding)
+    
+    #pad out the cycles since some spiking evaluations may have fewer
+    for i in range(len(phases)):
+        if padding[i] > 0:
+            pad_fn = lambda x: np.pad(x, ((0, 0), (0, 0), (0, padding[i])))
+            phases[i] = pad_fn(phases[i])
+
+    return phases
+
+
 def test_spiking():
     #repeat the process with spiking output
     result_spk = [eval_fn_spk(b['image']) for b in tqdm(iter(test_ds))]
-    predictions_spk = jnp.concatenate([r[0] for r in result_spk])
+    predictions_spk = pad_outputs([r[0] for r in result_spk])
     #get the overall accuracy
     accuracy_spk = accuracy_quadrature(predictions_spk, y_test)
     acc_spk = np.mean(accuracy_spk, axis=0)
