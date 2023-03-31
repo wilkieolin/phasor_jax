@@ -114,6 +114,6 @@ params_t, losses = train_model(model,
 
 
 
-filename = "params_" + str(n_layers) + "_layers"
+filename = "params_" + str(n_layers) + "_layers.p"
 with open(filename, 'wb') as file:
-    p.dump(file, params_t)
+    p.dump(params_t, file)
