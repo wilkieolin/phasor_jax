@@ -128,6 +128,7 @@ eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_
 
 
 all_results = {}
+all_results["mask angle"] = mask_angle
 
 def test_normal():
     #compute the test set accuracy
