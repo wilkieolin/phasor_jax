@@ -27,7 +27,6 @@ dataset = args.dataset
 n_batch = args.n_batch
 prng_seed = args.prng_seed
 n_batches = args.n_batches
-params_file = args.params_file
 
 """
 Load the dataset.
