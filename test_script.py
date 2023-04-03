@@ -164,7 +164,7 @@ def pad_outputs(phases):
             pad_fn = lambda x: np.pad(x, ((0, 0), (0, 0), (0, padding[i])))
             phases[i] = pad_fn(phases[i])
 
-    return phases
+    return np.concatenate(phases, axis=0)
 
 
 def test_spiking():
