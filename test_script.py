@@ -124,17 +124,18 @@ else:
 """
 Test performance
 """
-#define a labmda to compute accuracy we can dispatch over batches
+#define a lambda to compute accuracy we can dispatch over batches
 eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
 
+#define a lambda to compute the spiking equivalent
 if mask_angle > 0.0:
-    spk_filter = lambda x, shp: inhibit_midpoint(x, mask_angle=mask_angle)
+    spike_filter = lambda x, shp: inhibit_midpoint(x, mask_angle=mask_angle)
 elif cross_inhibit > 0.0:
-    spk_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
+    spike_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
 else:
-    spk_filter = None
-    
-eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spk_filter = spk_filter, spiking = True)
+    spike_filter = None
+
+eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spike_filter = spike_filter, spiking = True)
 
 
 all_results = {}

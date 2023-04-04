@@ -157,7 +157,7 @@ class PhasorDense(hk.Module):
         
     def __call__(self, x, spiking: bool = False, mask_angle: float = -1.0, **kwargs):
         if spiking:
-            return self.call_dynamic(x, mask_angle=mask_angle, **kwargs)
+            return self.call_dynamic(x, **kwargs)
 
         #access the weights / biases
         j, k = x.shape[-1], self.output_size
@@ -168,10 +168,6 @@ class PhasorDense(hk.Module):
         pi = jnp.pi
         imag = complex(0.0, 1.0)
         xz = jnp.exp(imag * pi * x)
-        #mask all inputs inside the arc of the mask angle
-        if mask_angle > 0.0:
-            mask = jnp.greater_equal(jnp.abs(x), mask_angle)
-            xz = xz * mask
         
         #convert weights to complex
         wz = complex(w, jnp.zeros_like(w))
