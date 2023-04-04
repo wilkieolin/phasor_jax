@@ -15,6 +15,7 @@ import haiku as hk
 from einops import rearrange
 from phasor_jax.utils import *
 from phasor_jax.spiking import *
+from typing import Callable
 
 
 #   _____      _           _ _   _                
@@ -195,7 +196,7 @@ class PhasorDense(hk.Module):
                         period: float = 1.0,
                         threshold: float = 0.05,
                         gpu: bool = True,
-                        mask_angle: float = -1.0,
+                        spike_filter: Callable = None,
                         return_solution: bool = False,
                         **kwargs):
         
@@ -238,9 +239,8 @@ class PhasorDense(hk.Module):
         #find and return the spikes produced
         y = find_spikes(solution, threshold=threshold, offset=offset)
 
-        #exclude spikes from the inhibitory period if mask angle is being used
-        if mask_angle > 0.0:
-            y = inhibit_midpoint(y, mask_angle, 1.0)
+        if spike_filter is not None:
+            y = spike_filter(y)
 
         return y
 

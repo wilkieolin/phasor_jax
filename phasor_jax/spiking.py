@@ -34,6 +34,9 @@ def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
     return currents
 
 def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, t_box: float = 0.03):
+    """
+    Produce the current necessary to produce the correct bias in a spiking R&F neuron.
+    """
     t_bias = period / 2.0
     t_cycle = (t - offset) % period
     cond = lambda t: (t > (t_bias - t_box)) * (t < (t_bias + t_box))
@@ -43,6 +46,26 @@ def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, 
     else:
         return jnp.zeros_like(bz)
 
+def calculate_field(x: SpikeTrain, 
+                   impulse: float = 0.1, 
+                   decay: float = -0.1,
+                   t_step: float = 0.01,
+                   t_box: float = 0.03,
+                   t_buffer: float = 0.2) -> np.ndarray:
+    """
+    Calculate an approximate 'local field potential' produced by a group of
+    spiking neurons.
+    """
+    
+    t_span = (np.min(x.times), np.max(x.times) + t_buffer)
+    t_grid = define_tgrid(t_span, t_step)
+    active_inds = generate_active(x, t_grid, t_box)
+    current_fn = lambda t: current(x, active_inds, t, t_step)
+    dfield_fn = lambda t, f: dfield_dt(current_fn, t, f, impulse, decay)
+
+    field_init = np.zeros((1))
+    field = solve_heun(dfield_fn, t_grid, t_step, field_init)
+    return field
 
 def dphase_min(phases: jnp.ndarray):
     """
@@ -84,8 +107,16 @@ def define_tgrid(t_span: float, t_step: float) -> np.ndarray:
     
     return times
 
+def dfield_dt(current_fn, t, field, impulse: float, decay: float):
+    """
+    Given a function representing the spikes of a neural layer, calculate
+    a local "field" over time. 
+    """
+    field = np.sum(impulse * current_fn(t)) + decay * field
+    return field
+
 def dz_dt(current_fn, 
-          bias_fn,
+            bias_fn,
             t, 
             z, 
             weight = None, 
@@ -110,13 +141,13 @@ def dz_dt(current_fn,
     return dz
 
 def dz_dt_gpu(current_fn, 
-              bias_fn,
-            t: float, 
-            z: jnp.ndarray, 
-            weight = None, 
-            leakage: float = -0.2, 
-            ang_freq: float = 2 * np.pi,
-            arbscale: float = 1.0,):
+                bias_fn,
+                t: float, 
+                z: jnp.ndarray, 
+                weight = None, 
+                leakage: float = -0.2, 
+                ang_freq: float = 2 * np.pi,
+                arbscale: float = 1.0,):
     """
     Given a function to calculate the current at a moment t and the present
     potential z, calculate the change in potentials. Call GPU for matmul.
@@ -134,7 +165,36 @@ def dz_dt_gpu(current_fn,
 
     return dz
 
-def find_spikes(sol: ODESolution, offset: float, threshold: float = 2e-3, sparsity: float = -1.0) -> SpikeTrain:
+def dz_dt_similarity(current_fn, 
+                    bias_fn,
+                    t: float, 
+                    z: jnp.ndarray, 
+                    weight = None, 
+                    leakage: float = -0.2, 
+                    ang_freq: float = 2 * np.pi,
+                    arbscale: float = 1.0,):
+    """
+    Given a function to calculate the current at a moment t and the present
+    potential z, calculate the change in potentials. Call GPU for matmul.
+    """
+    #the leakage and oscillation parameters are combined to a single complex constant, k
+    k = leakage + 1.0j*ang_freq
+    
+    #accumulate spikes into dendrites
+    currents = jnp.matmul(current_fn(t), weight)
+    #add the bias
+    currents = currents + bias_fn(t)
+    #update the previous potential and add the currents
+    dz = k * z + arbscale * currents
+    dz = jnp.array(dz)
+
+    return dz
+
+def find_spikes(sol: ODESolution, 
+                offset: float, 
+                threshold: float = 2e-3, 
+                sparsity: float = -1.0,
+                complex: bool = True) -> SpikeTrain:
     """
     'Gradient' method for spike detection. Finds where voltages (imaginary component of complex R&F potential) 
     reaches a local minimum & are above a threshold, stores the corresponding time. Sparsity applies a dynamic
@@ -144,7 +204,10 @@ def find_spikes(sol: ODESolution, offset: float, threshold: float = 2e-3, sparsi
     ts = sol.t
     zs = sol.y
     #find where voltage reaches its max
-    voltage = np.imag(zs)
+    if complex:
+        voltage = np.imag(zs)
+    else:
+        voltage = zs
     dvs = np.gradient(voltage, axis=-1)
     dsign = np.sign(dvs)
     #produces ones at the local maxima
@@ -178,7 +241,53 @@ def find_spikes(sol: ODESolution, offset: float, threshold: float = 2e-3, sparsi
     spikes = SpikeTrain(spks_r, spks_t, shape, offset + 0.25)
     return spikes
 
-def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0):
+def inhibit_cross(x: SpikeTrain, inhibition: SpikeTrain, period: float, alignment: str = "mid") -> SpikeTrain:
+    """
+    Given an input set of spikes, use a second set of spikes to remove spikes from the first train which
+    happen within the period of the inhibitory spikes.
+    """
+    if alignment == "pre":
+        within_period = lambda x: (x > (inhibition.times - period)) * (x < (inhibition.times))
+    else:
+        half_period = period / 2.0
+        #determine which spikes fall within the cross-inhibitory period
+        within_period = lambda x: (x > (inhibition.times - half_period)) * (x < (inhibition.times + half_period))
+
+    inhibited = lambda x: np.sum(within_period(x)) > 0
+    #map this function over the input spike train
+    rejected = np.array(list(map(inhibited, x.times)))
+    passed = np.logical_not(rejected)
+    #use it to filter the input & return cross-inhibited result
+    result = SpikeTrain([x.indices[0][passed]], x.times[passed], x.full_shape, x.offset)
+    
+    return result
+
+def inhibit_field(x: SpikeTrain, 
+                  t_inhibit: float,
+                  n_outputs: int, 
+                  decay: float = -5, 
+                  t_step: float = 0.01,
+                  t_box: float = 0.03,
+                  t_buffer: float = 0.0,
+                  threshold: float = 1.0) -> SpikeTrain:
+    """
+    Given a spike train, inhibit spikes occuring in the "busiest" period, found by
+    looking for a maxima in the local field potential. 
+    """
+
+    impulse = 1/n_outputs
+    field = calculate_field(x, 
+                            impulse = impulse,
+                            decay = decay,
+                            t_step = t_step,
+                            t_box = t_box,
+                            t_buffer = t_buffer)
+    
+    field_maxima = find_spikes(field, x.offset, complex = False, threshold = threshold)
+    x = inhibit_cross(x, field_maxima, period = t_inhibit, alignment="mid")
+    return x
+
+def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0) -> SpikeTrain:
     """
     Given a spike train, remove any spikes occuring within an inhibitory stage
     defined around the center of a period. 
@@ -234,6 +343,23 @@ def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarr
 def matrix_usage(x: jnp.ndarray) -> float:
     sparsity = jnp.sum(x != 0.0) / np.prod(x.shape)
     return sparsity
+
+def pad_outputs(phases):
+    """
+    Pad spiking outputs to a consistent shape for concatenation.
+    """
+    shapes = np.array([p.shape[2] for p in phases])
+    max = np.max(shapes)
+    padding = max -  shapes
+    print(padding)
+    
+    #pad out the cycles since some spiking evaluations may have fewer
+    for i in range(len(phases)):
+        if padding[i] > 0:
+            pad_fn = lambda x: np.pad(x, ((0, 0), (0, 0), (0, padding[i])))
+            phases[i] = pad_fn(phases[i])
+
+    return phases
 
 def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3, offset: float = 0.0) -> SpikeTrain:
     """
@@ -310,6 +436,10 @@ def solve_heun(dz, times, dt, init_val):
     return solution
 
 def spiking_rate(x: SpikeTrain, period: float = 1.0):
+    """
+    Calculate the number of spikes in a train relative to what is expected for a steadily driven R&F system
+    where the neurons fire once every resonant cycle.
+    """
     end_time = np.max(x.times)
     periods = np.ceil(end_time) // period
     total_spikes = len(x.times)
@@ -327,6 +457,9 @@ def time_to_phase(times, period: float = 1.0, offset: float = 0.0):
     return times
 
 def train_to_phase(spikes: SpikeTrain, period: float = 1.0):
+    """
+    Given a spike train, convert the absolute times to the phase values represented by those spikes.
+    """
     inds = spikes.indices
     times = spikes.times
     full_shape = spikes.full_shape
