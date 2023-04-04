@@ -124,22 +124,27 @@ else:
 """
 Test performance
 """
+
+all_results = {}
+all_results["mask angle"] = mask_angle
+all_results["cross inhibit"] = cross_inhibit
+
 #define a lambda to compute accuracy we can dispatch over batches
 eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
 
 #define a lambda to compute the spiking equivalent
 if mask_angle > 0.0:
     spike_filter = lambda x, shp: inhibit_midpoint(x, mask_angle=mask_angle)
+    filename = "phasor_" + str(n_layers) + "_layers_angle_" + str(mask_angle) + ".p"
 elif cross_inhibit > 0.0:
     spike_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
+    filename = "phasor_" + str(n_layers) + "_layers_inhibit_" + str(cross_inhibit) + ".p"
 else:
     spike_filter = None
+    filename = "phasor_" + str(n_layers) + "_layers.p"
 
 eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spike_filter = spike_filter, spiking = True)
 
-
-all_results = {}
-all_results["mask angle"] = mask_angle
 
 def test_normal():
     #compute the test set accuracy
@@ -195,7 +200,6 @@ print("Spiking accuracy: ", acc_spk)
 all_results["accuracy_spiking"] = acc_spk
 all_results["firing rates"] = avg_usage_spk
 
-filename = "phasor_" + str(n_layers) + "_layers_angle_" + str(mask_angle) + ".p"
 
 with open(filename, 'wb') as file:
     p.dump(all_results, file)
