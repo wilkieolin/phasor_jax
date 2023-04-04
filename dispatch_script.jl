@@ -1,18 +1,33 @@
-n_layers = 2
-mask_angles = 0.022:0.01:0.23
+n_layers::int = 1
+mask_angles::range = 0.0:0.01:0.25
+cross_inhibits::range = 0.0:0.01:0.10
+use_slurm::Bool = false
+
+cmds = []
 
 #train the model
 n_batches = 1000
 params_file = "params_" * string(n_layers) * "_layers.p"
 
+if use_slurm
+    prefix = `srun --gres=gpu:1 -t 00:30:00 python`
+else
+    prefix = `python`
+end
+
 if !isfile(params_file)
-    cmd = `srun --gres=gpu:1 -t 00:20:00 python train_script.py --n_batches $n_batches --n_layers $n_layers`
-    run(cmd)
+    train = `train_script.py --n_batches $n_batches --n_layers $n_layers`)
+    run(pipeline(prefix, train))
 end
 
 #test it over the range of mask angles
 for angle in mask_angles
-    cmd = `srun --gres=gpu:1 -t 00:20:00 python test_script.py --n_layers $n_layers --mask_angle $angle --params_file $params_file`
-    @async run(cmd)
-    sleep(0.1)
+    mask_test = `python test_script.py --n_layers $n_layers --mask_angle $angle --params_file $params_file`
+    run(pipeline(prefix, mask_test))
+end
+
+#test it over the range of mask angles
+for cross_inhibit in cross_inhibits
+    inhibit_test = `python test_script.py --n_layers $n_layers --cross_inhibit $cross_inhibit --params_file $params_file`
+    run(pipeline(prefix, inhibit_test))
 end
