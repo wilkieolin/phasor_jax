@@ -128,9 +128,12 @@ Test performance
 eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
 
 if mask_angle > 0.0:
-    spk_filter = lambda x: inhibit_midpoint(x, mask_angle=mask_angle)
+    spk_filter = lambda x, shp: inhibit_midpoint(x, mask_angle=mask_angle)
 elif cross_inhibit > 0.0:
-    spk_filter = lambda x: cross_inhibit(x, )
+    spk_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
+else:
+    spk_filter = None
+    
 eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spk_filter = spk_filter, spiking = True)
 
 

@@ -240,7 +240,7 @@ class PhasorDense(hk.Module):
         y = find_spikes(solution, threshold=threshold, offset=offset)
 
         if spike_filter is not None:
-            y = spike_filter(y)
+            y = spike_filter(y, self.output_size)
 
         return y
 
