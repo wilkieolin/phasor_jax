@@ -22,6 +22,7 @@ parser.add_argument("--prng_seed", type=int, default=42)
 parser.add_argument("--n_batches", type=int, default=1000)
 parser.add_argument("--params_file", type=str, default=None)
 parser.add_argument("--mask_angle", type=float, default=0.0)
+parser.add_argument("--cross_inhibit", type=float, default=0.0)
 
 args = parser.parse_args()
 n_layers = args.n_layers
@@ -31,6 +32,7 @@ prng_seed = args.prng_seed
 n_batches = args.n_batches
 params_file = args.params_file
 mask_angle = args.mask_angle
+cross_inhibit = args.cross_inhibit
 #add more time for deeper layers to propagate
 t_exec = 9.75 + 0.25 * n_layers
 
@@ -124,7 +126,12 @@ Test performance
 """
 #define a labmda to compute accuracy we can dispatch over batches
 eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
-eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle, spiking = True)
+
+if mask_angle > 0.0:
+    spk_filter = lambda x: inhibit_midpoint(x, mask_angle=mask_angle)
+elif cross_inhibit > 0.0:
+    spk_filter = lambda x: cross_inhibit(x, )
+eval_fn_spk = lambda x: model.apply(params_t, key, x, n_layers = n_layers, spk_filter = spk_filter, spiking = True)
 
 
 all_results = {}
@@ -156,7 +163,6 @@ def pad_outputs(phases):
     shapes = np.array([p.shape[2] for p in phases])
     max = np.max(shapes)
     padding = max -  shapes
-    print(padding)
     
     #pad out the cycles since some spiking evaluations may have fewer
     for i in range(len(phases)):
