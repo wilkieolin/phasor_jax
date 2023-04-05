@@ -1,6 +1,9 @@
 n_layers::int = 1
-mask_angles::range = 0.0:0.01:0.25
-cross_inhibits::range = 0.0:0.01:0.10
+# mask_angles::range = 0.0:0.01:0.25
+# cross_inhibits::range = 0.0:0.01:0.10
+mask_angles::range = 0.0:0.01:0.0
+cross_inhibits::range = 0.0:0.01:0.0
+random_removals::range = 0.0:0.05:1.0
 use_slurm::Bool = false
 
 cmds = []
@@ -26,8 +29,14 @@ for angle in mask_angles
     run(pipeline(prefix, mask_test))
 end
 
-#test it over the range of mask angles
+#test it over the range of inhibition times
 for cross_inhibit in cross_inhibits
     inhibit_test = `python test_script.py --n_layers $n_layers --cross_inhibit $cross_inhibit --params_file $params_file`
+    run(pipeline(prefix, inhibit_test))
+end
+
+#test it over the range of inhibition times
+for random_removal in random_removals
+    inhibit_test = `python test_script.py --n_layers $n_layers --random_removal $random_removal --params_file $params_file`
     run(pipeline(prefix, inhibit_test))
 end

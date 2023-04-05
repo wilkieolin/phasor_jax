@@ -23,6 +23,7 @@ parser.add_argument("--n_batches", type=int, default=1000)
 parser.add_argument("--params_file", type=str, default=None)
 parser.add_argument("--mask_angle", type=float, default=0.0)
 parser.add_argument("--cross_inhibit", type=float, default=0.0)
+parser.add_argument("--random_removal", type=float, default=0.0)
 
 args = parser.parse_args()
 n_layers = args.n_layers
@@ -33,6 +34,7 @@ n_batches = args.n_batches
 params_file = args.params_file
 mask_angle = args.mask_angle
 cross_inhibit = args.cross_inhibit
+random_removal = args.random_removal
 #add more time for deeper layers to propagate
 t_exec = 9.75 + 0.25 * n_layers
 
@@ -139,6 +141,9 @@ if mask_angle > 0.0:
 elif cross_inhibit > 0.0:
     spike_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
     filename = "phasor_" + str(n_layers) + "_layers_inhibit_" + str(cross_inhibit) + ".p"
+elif random_removal > 0.0:
+    spike_filter = lambda x, shp: random_removal(x, random_removal)
+    filename = "phasor_" + str(n_layers) + "_layers_random_" + str(random_removal) + ".p"
 else:
     spike_filter = None
     filename = "phasor_" + str(n_layers) + "_layers.p"

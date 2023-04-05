@@ -318,6 +318,15 @@ def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0
     spikes = SpikeTrain(inds, times, full_shape, offset)
     return spikes
 
+def inhibit_random(x: SpikeTrain, p_removal: float = 0.0) -> SpikeTrain:
+    """
+    Randomly remove spikes from a train with probability p_removal.
+    """
+    selection = np.random.uniform(size = x.times.shape) > p_removal
+    result = SpikeTrain([x.indices[0][selection]], x.times[selection], x.full_shape, x.offset)
+
+    return result
+
 def generate_active(x: SpikeTrain, t_grid: np.ndarray, t_box: float) -> np.ndarray:
     """
     Given the time grid which is being solved over, generate an array which contains the
