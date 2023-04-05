@@ -1,7 +1,7 @@
 n_layers::Int = 1
-mask_angles = 0.0:0.01:0.25
+mask_angles = 0.275:0.025:0.50
 cross_inhibits = 0.0:0.01:0.10
-random_removals = 0.0:0.05:1.0
+random_removals = 0.0:0.05:0.95
 use_slurm::Bool = false
 
 cmds = []
@@ -17,24 +17,32 @@ else
 end
 
 if !isfile(params_file)
-    train = "train_script.py --n_batches $n_batches --n_layers $n_layers"
-    run(Cmd([prefix, train]))
+    train = ["train_script.py", "--n_batches $n_batches", "--n_layers $n_layers"]
+    run(Cmd([prefix, train...]))
 end
 
-# #test it over the range of mask angles
-# for angle in mask_angles
-#     mask_test = "test_script.py --n_layers $n_layers --mask_angle $angle --params_file $params_file"
-#     run(Cmd([prefix, mask_test]))
-# end
+#test it over the range of mask angles
+for angle in mask_angles
+    mask_test = ["test_script.py", "--n_layers", string(n_layers), 
+                                "--mask_angle", string(angle), 
+                                "--params_file", params_file]
+    run(Cmd([prefix, mask_test...]))
+end
 
 # #test it over the range of inhibition times
 # for cross_inhibit in cross_inhibits
-#     inhibit_test = "test_script.py --n_layers $n_layers --cross_inhibit $cross_inhibit --params_file $params_file"
+#     inhibit_test = ["test_script.py",
+#                     "--n_layers", string(n_layers),
+#                     "--cross_inhibit", string(cross_inhibit),
+#                     "--params_file", params_file]
 #     run(Cmd([prefix, inhibit_test]))
 # end
 
-#test it over the range of inhibition times
-for random_removal in random_removals
-    inhibit_test = `python test_script.py --n_layers $n_layers --random_removal $random_removal --params_file $params_file`
-    run(Cmd([prefix, inhibit_test]))
-end
+# #test it over the range of inhibition times
+# for random_removal in random_removals
+#     random_test = ["test_script.py",
+#                     "--n_layers", string(n_layers),
+#                     "--random_removal", string(random_removal),
+#                     "--params_file", params_file]
+#     run(Cmd([prefix, random_test]))
+# end
