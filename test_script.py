@@ -130,6 +130,7 @@ Test performance
 all_results = {}
 all_results["mask angle"] = mask_angle
 all_results["cross inhibit"] = cross_inhibit
+all_results["random_removal"] = random_removal
 
 #define a lambda to compute accuracy we can dispatch over batches
 eval_fn = lambda x: model.apply(params_t, key, x, n_layers = n_layers, mask_angle = mask_angle)
@@ -142,7 +143,7 @@ elif cross_inhibit > 0.0:
     spike_filter = lambda x, shp: inhibit_field(x, cross_inhibit, shp)
     filename = "phasor_" + str(n_layers) + "_layers_inhibit_" + str(cross_inhibit) + ".p"
 elif random_removal > 0.0:
-    spike_filter = lambda x, shp: random_removal(x, random_removal)
+    spike_filter = lambda x, shp: inhibit_random(x, random_removal)
     filename = "phasor_" + str(n_layers) + "_layers_random_" + str(random_removal) + ".p"
 else:
     spike_filter = None
