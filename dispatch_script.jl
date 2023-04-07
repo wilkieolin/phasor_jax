@@ -11,14 +11,17 @@ n_batches = 1000
 params_file = "params_" * string(n_layers) * "_layers.p"
 
 if use_slurm
-    prefix = "srun --gres=gpu:1 -t 00:30:00 python"
+    prefix = ["srun",
+             "--gres=gpu:1",
+             "-t 00:30:00",
+             "python"]
 else
-    prefix = "python"
+    prefix = ["python"]
 end
 
 if !isfile(params_file)
     train = ["train_script.py", "--n_batches $n_batches", "--n_layers $n_layers"]
-    run(Cmd([prefix, train...]))
+    run(Cmd([prefix..., train...]))
 end
 
 #test it over the range of mask angles
@@ -26,7 +29,7 @@ end
 #     mask_test = ["test_script.py", "--n_layers", string(n_layers), 
 #                                 "--mask_angle", string(angle), 
 #                                 "--params_file", params_file]
-#     run(Cmd([prefix, mask_test...]))
+#     run(Cmd([prefix..., mask_test...]))
 # end
 
 #test it over the range of inhibition times
@@ -35,7 +38,7 @@ for cross_inhibit in cross_inhibits
                     "--n_layers", string(n_layers),
                     "--cross_inhibit", string(cross_inhibit),
                     "--params_file", params_file]
-    run(Cmd([prefix, inhibit_test...]))
+    run(Cmd([prefix..., inhibit_test...]))
 end
 
 # #test it over the range of inhibition times
@@ -44,5 +47,5 @@ end
 #                     "--n_layers", string(n_layers),
 #                     "--random_removal", string(random_removal),
 #                     "--params_file", params_file]
-#     run(Cmd([prefix, random_test...]))
+#     run(Cmd([prefix..., random_test...]))
 # end
