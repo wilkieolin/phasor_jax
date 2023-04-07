@@ -1,7 +1,7 @@
 n_layers::Int = 1
 mask_angles = 0.525:0.025:0.95
-cross_inhibits = 0.0:0.01:0.10
-random_removals = 0.0:0.05:0.95
+cross_inhibits = 0.01:0.01:0.15
+random_removals = 0.05:0.05:0.95
 use_slurm::Bool = false
 
 cmds = []
@@ -22,21 +22,21 @@ if !isfile(params_file)
 end
 
 #test it over the range of mask angles
-for angle in mask_angles
-    mask_test = ["test_script.py", "--n_layers", string(n_layers), 
-                                "--mask_angle", string(angle), 
-                                "--params_file", params_file]
-    run(Cmd([prefix, mask_test...]))
-end
-
-# #test it over the range of inhibition times
-# for cross_inhibit in cross_inhibits
-#     inhibit_test = ["test_script.py",
-#                     "--n_layers", string(n_layers),
-#                     "--cross_inhibit", string(cross_inhibit),
-#                     "--params_file", params_file]
-#     run(Cmd([prefix, inhibit_test]))
+# for angle in mask_angles
+#     mask_test = ["test_script.py", "--n_layers", string(n_layers), 
+#                                 "--mask_angle", string(angle), 
+#                                 "--params_file", params_file]
+#     run(Cmd([prefix, mask_test...]))
 # end
+
+#test it over the range of inhibition times
+for cross_inhibit in cross_inhibits
+    inhibit_test = ["test_script.py",
+                    "--n_layers", string(n_layers),
+                    "--cross_inhibit", string(cross_inhibit),
+                    "--params_file", params_file]
+    run(Cmd([prefix, inhibit_test...]))
+end
 
 # #test it over the range of inhibition times
 # for random_removal in random_removals
@@ -44,5 +44,5 @@ end
 #                     "--n_layers", string(n_layers),
 #                     "--random_removal", string(random_removal),
 #                     "--params_file", params_file]
-#     run(Cmd([prefix, random_test]))
+#     run(Cmd([prefix, random_test...]))
 # end
