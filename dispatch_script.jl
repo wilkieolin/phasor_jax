@@ -2,7 +2,7 @@ n_layers::Int = 1
 mask_angles = 0.525:0.025:0.95
 cross_inhibits = 0.15:0.025:0.60
 random_removals = 0.05:0.05:0.95
-use_slurm::Bool = false
+use_slurm::Bool = true
 
 cmds = []
 
@@ -13,7 +13,8 @@ params_file = "params_" * string(n_layers) * "_layers.p"
 if use_slurm
     prefix = ["srun",
              "--gres=gpu:1",
-             "-t 00:30:00",
+             "-t",
+	     "00:30:00",
              "python"]
 else
     prefix = ["python"]
