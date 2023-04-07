@@ -275,10 +275,6 @@ class PhasorMultiDense(hk.Module):
         pi = jnp.pi
         imag = jnp.complex64(1j)
         xz = jnp.exp(imag * pi * x)
-        #mask all inputs inside the arc of the mask angle
-        if self.mask_angle > 0.0:
-            mask = jnp.greater_equal(jnp.abs(x), self.mask_angle)
-            xz = xz * mask
         
         #convert weights to complex
         wz = jnp.complex64(w)

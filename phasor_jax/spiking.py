@@ -2,7 +2,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from einops import rearrange
-from collections import namedtuple
+from collections import namedtuple 
+from scipy.ndimage import gaussian_filter1d
 
 SpikeTrain = namedtuple("SpikeTrain",
                          ["indices", 
@@ -66,6 +67,17 @@ def calculate_field(x: SpikeTrain,
     field_init = np.zeros((1))
     field = solve_heun(dfield_fn, t_grid, t_step, field_init)
     return field
+
+def diff_smooth(field: ODESolution, sigma: float = 1.0, t_step: float = 0.01):
+    v = field.y
+    dv = np.diff(v, axis=1) / t_step
+    dv = gaussian_filter1d(dv, sigma)
+    t = field.t[0:-1] + t_step / 2.0
+    soln = ODESolution()
+    soln.y = dv
+    soln.t = t
+    return soln
+
 
 def dphase_min(phases: jnp.ndarray):
     """
@@ -241,7 +253,7 @@ def find_spikes(sol: ODESolution,
     spikes = SpikeTrain(spks_r, spks_t, shape, offset + 0.25)
     return spikes
 
-def inhibit_cross(x: SpikeTrain, inhibition: SpikeTrain, period: float, alignment: str = "mid") -> SpikeTrain:
+def inhibit_cross(x: SpikeTrain, inhibition: SpikeTrain, period: float, alignment: str = "center") -> SpikeTrain:
     """
     Given an input set of spikes, use a second set of spikes to remove spikes from the first train which
     happen within the period of the inhibitory spikes.
@@ -266,9 +278,10 @@ def inhibit_field(x: SpikeTrain,
                   t_inhibit: float,
                   n_outputs: int, 
                   decay: float = -5, 
-                  t_step: float = 0.01,
+                  t_step: float = 0.005,
                   t_box: float = 0.03,
                   t_buffer: float = 0.0,
+                  sigma: float = 5,
                   threshold: float = 1.0) -> SpikeTrain:
     """
     Given a spike train, inhibit spikes occuring in the "busiest" period, found by
@@ -283,8 +296,10 @@ def inhibit_field(x: SpikeTrain,
                             t_box = t_box,
                             t_buffer = t_buffer)
     
-    field_maxima = find_spikes(field, x.offset, complex = False, threshold = threshold)
-    x = inhibit_cross(x, field_maxima, period = t_inhibit, alignment="mid")
+    dfield = diff_smooth(field, sigma = sigma, t_step = t_step)
+    field_maxima = find_spikes(dfield, x.offset, complex = False, threshold = threshold)
+    x = inhibit_cross(x, field_maxima, period = t_inhibit, alignment="center")
+
     return x
 
 def inhibit_midpoint(x: SpikeTrain, mask_angle: float = 0.0, period: float = 1.0) -> SpikeTrain:

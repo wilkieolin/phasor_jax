@@ -1,5 +1,5 @@
 n_layers::Int = 1
-mask_angles = 0.275:0.025:0.50
+mask_angles = 0.525:0.025:0.95
 cross_inhibits = 0.0:0.01:0.10
 random_removals = 0.0:0.05:0.95
 use_slurm::Bool = false
