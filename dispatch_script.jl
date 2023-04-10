@@ -1,8 +1,8 @@
 n_layers::Int = 1
 mask_angles = 0.525:0.025:0.95
-cross_inhibits = 0.15:0.025:0.60
+cross_inhibits = 0.625:0.025:0.95
 random_removals = 0.05:0.05:0.95
-use_slurm::Bool = true
+use_slurm::Bool = false
 
 cmds = []
 
