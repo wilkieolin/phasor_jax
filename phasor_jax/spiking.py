@@ -63,6 +63,16 @@ def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, 
         return bz
     else:
         return jnp.zeros_like(bz)
+    
+def bias_gpu(bias: jnp.ndarray, t, t_window) -> jnp.ndarray:
+    full_shape = bias.shape
+    #determine which inputs are being stimulated
+    relative_time = jnp.abs(bias - t)
+    active_indices = jnp.where(relative_time < t_window)
+    impulses = jnp.zeros(full_shape)
+    impulses = impulses.at[active_indices[0]].set(1.0)
+
+    return impulses
 
 def calculate_field(x: SpikeTrain, 
                    impulse: float = 0.1, 
@@ -416,7 +426,7 @@ def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3, offset
     inds = jnp.unravel_index(inds, shape)
 
     #list the time offset for each index and repeat it for repeats cycles
-    times = x[inds]
+    times = jnp.array(x[inds])
 
     n_t = times.shape[0]
     dtype = x.dtype
