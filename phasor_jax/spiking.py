@@ -34,6 +34,23 @@ def current(x: SpikeTrain, active_inds: np.ndarray, t: float, t_step: float):
     
     return currents
 
+def current_gpu(x: SpikeTrain, t, t_window) -> jnp.ndarray:
+    indices = x.indices
+    times = x.times
+    full_shape = x.full_shape
+    assert len(indices) == len(full_shape), "GPU Current function uses multi-dimensional index spike train"
+
+    #determine which inputs are being stimulated
+    relative_time = jnp.abs(times - t)
+    active = jnp.where(relative_time < t_window)[0]
+    #convert the indices of active inputs to neurons
+    active_indices = tuple(index[active] for index in indices)
+    #return an array representing the current
+    impulses = jnp.zeros(full_shape)
+    impulses = impulses.at[active_indices].set(1.0)
+
+    return impulses
+
 def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, t_box: float = 0.03):
     """
     Produce the current necessary to produce the correct bias in a spiking R&F neuron.
@@ -393,28 +410,20 @@ def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3, offset
 
     t_phase0 = period/2.0
     shape = x.shape
-    
-    x = x.ravel()
 
     #list and repeat the index 
-    inds = (np.arange(len(x)),)
+    inds = jnp.repeat(jnp.arange(np.prod(shape)), repeats)
+    inds = jnp.unravel_index(inds, shape)
 
     #list the time offset for each index and repeat it for repeats cycles
     times = x[inds]
 
-    # order = np.argsort(times)
-    
-    # #sort by time
-    # times = times[order]
-    # inds = [np.take(inds[0], order)]
-    
     n_t = times.shape[0]
     dtype = x.dtype
     
     times = times * t_phase0 + t_phase0
 
     #tile across time
-    inds = [np.tile(inds[0], (repeats))]
     times = np.tile(times, (repeats))
 
     if repeats > 1:
