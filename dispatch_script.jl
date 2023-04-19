@@ -1,5 +1,5 @@
-n_layers::Int = 1
-mask_angles = 0.525:0.025:0.95
+n_layers::Int = 3
+mask_angles = 0.0:0.025:0.15
 cross_inhibits = 0.625:0.025:0.95
 random_removals = 0.05:0.05:0.95
 use_slurm::Bool = false
@@ -21,26 +21,28 @@ else
 end
 
 if !isfile(params_file)
-    train = ["train_script.py", "--n_batches $n_batches", "--n_layers $n_layers"]
+    train = ["train_script.py", 
+            "--n_batches", string(n_batches),
+            "--n_layers", string(n_layers)]
     run(Cmd([prefix..., train...]))
 end
 
 #test it over the range of mask angles
-# for angle in mask_angles
-#     mask_test = ["test_script.py", "--n_layers", string(n_layers), 
-#                                 "--mask_angle", string(angle), 
-#                                 "--params_file", params_file]
-#     run(Cmd([prefix..., mask_test...]))
-# end
+for angle in mask_angles
+    mask_test = ["test_script.py", "--n_layers", string(n_layers), 
+                                "--mask_angle", string(angle), 
+                                "--params_file", params_file]
+    run(Cmd([prefix..., mask_test...]))
+end
 
 #test it over the range of inhibition times
-for cross_inhibit in cross_inhibits
-    inhibit_test = ["test_script.py",
-                    "--n_layers", string(n_layers),
-                    "--cross_inhibit", string(cross_inhibit),
-                    "--params_file", params_file]
-    run(Cmd([prefix..., inhibit_test...]))
-end
+# for cross_inhibit in cross_inhibits
+#     inhibit_test = ["test_script.py",
+#                     "--n_layers", string(n_layers),
+#                     "--cross_inhibit", string(cross_inhibit),
+#                     "--params_file", params_file]
+#     run(Cmd([prefix..., inhibit_test...]))
+# end
 
 # #test it over the range of inhibition times
 # for random_removal in random_removals
