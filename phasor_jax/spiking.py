@@ -64,11 +64,12 @@ def bias_current(t: float, bz: jnp.ndarray, offset: float, period: float = 1.0, 
     else:
         return jnp.zeros_like(bz)
     
-def bias_gpu(bias: jnp.ndarray, t, t_window) -> jnp.ndarray:
+def bias_gpu(t, bias: jnp.ndarray, t_offset: float = 0.0, t_period = 1.0, t_box = 0.03) -> jnp.ndarray:
     full_shape = bias.shape
+    t_cycle = (t - t_offset) % t_period
     #determine which inputs are being stimulated
-    relative_time = jnp.abs(bias - t)
-    active_indices = jnp.where(relative_time < t_window)
+    relative_time = jnp.abs(t_cycle - bias)
+    active_indices = jnp.where(relative_time < t_box)
     impulses = jnp.zeros(full_shape)
     impulses = impulses.at[active_indices[0]].set(1.0)
 
@@ -155,31 +156,6 @@ def dfield_dt(current_fn, t, field, impulse: float, decay: float):
     return field
 
 def dz_dt(current_fn, 
-            bias_fn,
-            t, 
-            z, 
-            weight = None, 
-            leakage: float = -0.2, 
-            ang_freq: float = 2 * np.pi,
-            arbscale: float = 1.0,):
-    """
-    Given a function to calculate the current at a moment t and the present
-    potential z, calculate the change in potentials
-    """
-    #the leakage and oscillation parameters are combined to a single complex constant, k
-    k = leakage + 1.0j*ang_freq
-    
-    #multiply current by the weights
-    currents = np.matmul(current_fn(t), weight, dtype="complex128")
-    #add the bias
-    currents += bias_fn(t)
-
-    #update the previous potential and add the currents
-    dz = k * z + arbscale * currents
-
-    return dz
-
-def dz_dt_gpu(current_fn, 
                 bias_fn,
                 t: float, 
                 z: jnp.ndarray, 
@@ -204,30 +180,6 @@ def dz_dt_gpu(current_fn,
 
     return dz
 
-def dz_dt_similarity(current_fn, 
-                    bias_fn,
-                    t: float, 
-                    z: jnp.ndarray, 
-                    weight = None, 
-                    leakage: float = -0.2, 
-                    ang_freq: float = 2 * np.pi,
-                    arbscale: float = 1.0,):
-    """
-    Given a function to calculate the current at a moment t and the present
-    potential z, calculate the change in potentials. Call GPU for matmul.
-    """
-    #the leakage and oscillation parameters are combined to a single complex constant, k
-    k = leakage + 1.0j*ang_freq
-    
-    #accumulate spikes into dendrites
-    currents = jnp.matmul(current_fn(t), weight)
-    #add the bias
-    currents = currents + bias_fn(t)
-    #update the previous potential and add the currents
-    dz = k * z + arbscale * currents
-    dz = jnp.array(dz)
-
-    return dz
 
 def find_spikes(sol: ODESolution, 
                 offset: float, 

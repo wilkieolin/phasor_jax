@@ -191,11 +191,11 @@ class PhasorDense(hk.Module):
                         z_init = None,
                         period: float = 1.0,
                         threshold: float = 0.05,
-                        gpu: bool = True,
                         spike_filter: Callable = None,
                         return_solution: bool = False,
                         **kwargs):
         
+        print("start")
         full_shape = x.full_shape
         offset = x.offset
 
@@ -208,25 +208,20 @@ class PhasorDense(hk.Module):
         #define the initial state
         state_shape = (n_batch, n_output)
         if z_init is None:
-            z_init = np.zeros(state_shape, dtype="complex128")
+            z_init = jnp.zeros(state_shape, dtype="complex64")
         else:
             assert z_init.shape is state_shape, "Initial z-values must match batch & layer shape."
 
         #define the current-generating function
-        t_grid = define_tgrid(t_range, t_step)
-        active_inds = generate_active(x, t_grid, t_box)
-        current_fn = lambda t: current(x, active_inds, t, t_step)
-        bias_fn = lambda t: bias_current(t, bz, offset, period, t_box)
+        current_fn = lambda t: current_gpu(x, t, t_box)
+        bias_fn = lambda t: bias_gpu(t, bz, t_offset = x.offset, t_period = period, t_box = t_box)
         #define the differential update
-        if gpu:
-            dz_fn = lambda t, z: dz_dt_gpu(current_fn, bias_fn, t, z, weight=w, **kwargs)
-        else:
-            dz_fn = lambda t, z: dz_dt(current_fn, bias_fn, t, z, weight=w, **kwargs)
+        dz_fn = lambda t, z: dz_dt(current_fn, bias_fn, t, z, weight=w, **kwargs)
 
         #integrate through time
         # if self.name is not None:
         #     print("Solving layer", self.name)
-
+        t_grid = define_tgrid(t_range, t_step)
         solution = solve_heun(dz_fn, t_grid, t_step, z_init)
 
         if return_solution:
