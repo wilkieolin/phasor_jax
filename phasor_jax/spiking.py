@@ -180,6 +180,30 @@ def dz_dt(current_fn,
 
     return dz
 
+def dz_dt_similarity(current_a, 
+                     current_b,
+                    t: float, 
+                    z_a: jnp.ndarray, 
+                    z_b: jnp.ndarray,
+                    weight = None, 
+                    leakage: float = -0.5, 
+                    ang_freq: float = 2 * np.pi,):
+    """
+    Given a function to calculate the current at a moment t and the present
+    potential z, calculate the change in potentials. Call GPU for matmul.
+    """
+    #the leakage and oscillation parameters are combined to a single complex constant, k
+    k = leakage + 1.0j*ang_freq
+    
+    #z_a = 
+
+    
+
+    #update the previous potential and add the currents
+    dz = k * z + arbscale * currents
+    dz = jnp.array(dz)
+
+    return dz
 
 def find_spikes(sol: ODESolution, 
                 offset: float, 
@@ -197,9 +221,11 @@ def find_spikes(sol: ODESolution,
     #find where voltage reaches its max
     if complex:
         voltage = np.imag(zs)
+        dvs = np.real(zs)
     else:
         voltage = zs
-    dvs = np.gradient(voltage, axis=-1)
+        dvs = np.gradient(voltage, axis=-1)
+    
     dsign = np.sign(dvs)
     #produces ones at the local maxima
     spks = np.diff(dsign, axis=-1, prepend=np.zeros_like((zs.shape[1]))) < 0
@@ -386,13 +412,13 @@ def phase_to_train(x: jnp.ndarray, period: float = 1.0, repeats: int = 3, offset
     times = times * t_phase0 + t_phase0
 
     #tile across time
-    times = np.tile(times, (repeats))
+    times = jnp.tile(times, (repeats))
 
     if repeats > 1:
         
         #create a list of time offsets to move spikes forward by T for repetitions
-        offsets = np.arange(0, repeats, dtype=dtype) * period
-        offsets = np.repeat(offsets, n_t)
+        offsets = jnp.arange(0, repeats, dtype=dtype) * period
+        offsets = jnp.repeat(offsets, n_t)
 
         times = offsets + times
     

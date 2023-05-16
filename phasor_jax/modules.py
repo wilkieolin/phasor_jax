@@ -195,7 +195,6 @@ class PhasorDense(hk.Module):
                         return_solution: bool = False,
                         **kwargs):
         
-        print("start")
         full_shape = x.full_shape
         offset = x.offset
 
